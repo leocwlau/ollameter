@@ -148,10 +148,10 @@ struct CreditDataView: View {
             }
 
             LimitBarView(
-                label: "Allowance",
+                label: "Usage",
                 fillFraction: credit.usedPercent / 100,
                 fillColor: color(credit.usedColor),
-                caption: "\(credit.balanceText) of \(credit.allowanceText) used"
+                caption: "\(credit.usageText) of \(credit.allowanceText) used"
             )
             LimitBarView(
                 label: "Period",

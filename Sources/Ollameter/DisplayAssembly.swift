@@ -17,6 +17,7 @@ struct CreditDisplay {
     var deltaText: String
     var deltaColor: MetricColor
     var deltaCaption: String
+    var usageText: String
     var balanceText: String
     var allowanceText: String
     var resetsText: String?
@@ -79,6 +80,7 @@ enum DisplayAssembly {
             deltaText: delta.text,
             deltaColor: delta.color,
             deltaCaption: delta.color == .red ? "ahead of usage pace" : "under usage pace",
+            usageText: Metrics.usd(allowanceUsd - balanceUsd),
             balanceText: Metrics.usd(balanceUsd),
             allowanceText: Metrics.usd(allowanceUsd),
             resetsText: momentText(until),
