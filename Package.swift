@@ -11,6 +11,11 @@ let package = Package(
         .executableTarget(
             name: "Ollameter",
             path: "Sources/Ollameter"
+        ),
+        .testTarget(
+            name: "OllameterTests",
+            dependencies: ["Ollameter"],
+            path: "Tests/OllameterTests"
         )
     ]
 )
