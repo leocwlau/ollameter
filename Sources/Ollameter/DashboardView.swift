@@ -19,10 +19,6 @@ final class PopoverViewModel: ObservableObject {
 
     var onKeyEntered: ((String) -> Void)?
 
-    var historyDisplay: HistoryDisplay {
-        DisplayAssembly.history(for: selectedRange, responses: usageResponses)
-    }
-
     var modelUsages: [ModelUsage] {
         DisplayAssembly.models(for: usageResponses, range: selectedRange)
     }
@@ -47,16 +43,12 @@ struct DashboardView: View {
             if model.showKeyForm {
                 KeyEntryForm(model: model)
             } else if let data = model.data {
-                DataView(data: data, usages: model.modelUsages)
+                DataView(model: model, data: data, usages: model.modelUsages)
             } else {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
                     Text("Fetching balance...").font(.caption).foregroundStyle(.secondary)
                 }
-            }
-
-            if !model.showKeyForm {
-                HistorySection(model: model)
             }
 
             FooterView(model: model)
@@ -119,20 +111,22 @@ struct KeyEntryForm: View {
 }
 
 struct DataView: View {
+    @ObservedObject var model: PopoverViewModel
     var data: DashboardData
     var usages: [ModelUsage]
 
     var body: some View {
         switch data {
         case .credit(let credit):
-            CreditDataView(credit: credit, usages: usages)
+            CreditDataView(model: model, credit: credit, usages: usages)
         case .legacy(let legacy):
-            LegacyDataView(legacy: legacy, usages: usages)
+            LegacyDataView(model: model, legacy: legacy, usages: usages)
         }
     }
 }
 
 struct CreditDataView: View {
+    @ObservedObject var model: PopoverViewModel
     var credit: CreditDisplay
     var usages: [ModelUsage]
 
@@ -168,6 +162,7 @@ struct CreditDataView: View {
                 keyValue("Resets", resets)
             }
 
+            ModelUsageRangeSwitcher(model: model)
             ModelUsageList(models: usages)
         }
     }
@@ -186,6 +181,7 @@ struct CreditDataView: View {
 }
 
 struct LegacyDataView: View {
+    @ObservedObject var model: PopoverViewModel
     var legacy: LegacyDisplay
     var usages: [ModelUsage]
 
@@ -212,6 +208,7 @@ struct LegacyDataView: View {
                 }
             }
 
+            ModelUsageRangeSwitcher(model: model)
             ModelUsageList(models: usages)
         }
     }
@@ -281,71 +278,17 @@ struct ModelUsageList: View {
     }
 }
 
-struct HistorySection: View {
+struct ModelUsageRangeSwitcher: View {
     @ObservedObject var model: PopoverViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Usage history").font(.caption).foregroundStyle(.secondary)
-            Picker("Range", selection: $model.selectedRange) {
-                Text("24h").tag(UsageRange.h24)
-                Text("7d").tag(UsageRange.d7)
-                Text("30d").tag(UsageRange.d30)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-
-            let history = model.historyDisplay
-            if !history.isAvailable {
-                Text("Waiting for usage data...").font(.caption).foregroundStyle(.secondary)
-            } else if history.rows.isEmpty {
-                Text("No usage in this range").font(.caption).foregroundStyle(.secondary)
-            } else {
-                VStack(alignment: .leading, spacing: 3) {
-                    ForEach(history.rows, id: \.self) { row in
-                        HistoryRowView(row: row, hasUsdData: history.hasUsdData)
-                    }
-                }
-                if !history.hasUsdData {
-                    Text("Legacy-plan usage reports request counts only.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
+        Picker("Model usage range", selection: $model.selectedRange) {
+            Text("24h").tag(UsageRange.h24)
+            Text("7d").tag(UsageRange.d7)
+            Text("30d").tag(UsageRange.d30)
         }
-    }
-}
-
-struct HistoryRowView: View {
-    var row: HistoryRow
-    var hasUsdData: Bool
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Text(row.label)
-                .font(row.isTotal ? .caption.weight(.semibold) : .caption)
-            if row.isPartial {
-                Text("partial")
-                    .font(.caption2)
-                    .foregroundStyle(Color(nsColor: .systemOrange))
-            }
-            Spacer()
-            Text(countText).font(.caption).monospacedDigit()
-            if hasUsdData {
-                Text(usdText).font(.caption).monospacedDigit()
-            }
-        }
-        .foregroundStyle(row.isTotal ? Color.primary : Color.secondary)
-    }
-
-    private var countText: String {
-        if let count = row.requestCount { return "\(count) req" }
-        return "..."
-    }
-
-    private var usdText: String {
-        if let usd = row.usageUsd { return String(format: "$%.2f", usd) }
-        return "..."
+        .pickerStyle(.segmented)
+        .labelsHidden()
     }
 }
 

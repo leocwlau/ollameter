@@ -6,9 +6,9 @@ Source of truth for scope. Implementation must follow this document; changes to 
 
 ## 1. Overview
 
-Ollameter is a native macOS menu bar application that shows the user's remaining Ollama cloud credits at a glance. Clicking the menu bar icon opens a detailed view with credit balance, key management, and optionally usage history.
+Ollameter is a native macOS menu bar application that shows the user's remaining Ollama cloud credits at a glance. Clicking the menu bar icon opens a detailed view with credit balance, key management, and a selected-range model usage list.
 
-Balance data comes exclusively from the Ollama cloud balance API documented at https://docs.ollama.com/api/balance. Usage history, when included, uses the companion API documented at https://docs.ollama.com/api/cloud-usage.
+Balance data comes exclusively from the Ollama cloud balance API documented at https://docs.ollama.com/api/balance. The companion API documented at https://docs.ollama.com/api/cloud-usage is used only for the popover's selected-range model usage list.
 
 ## 2. Goals
 
@@ -53,14 +53,14 @@ Authorization: Bearer <API key>
 
 This endpoint takes no query parameters. It is the only source for the menu bar metric in v1.
 
-Optional secondary (usage history, per https://docs.ollama.com/api/cloud-usage):
+Optional secondary (model usage, per https://docs.ollama.com/api/cloud-usage):
 
 ```
 GET https://ollama.com/api/usage?range=24h|7d|30d
 Authorization: Bearer <API key>
 ```
 
-Query parameters: `range` (`24h`, `7d`, `30d`), `scope` (`self` or `team`), and `group_by=model` for per-model breakdowns. This endpoint is used for the usage history display.
+Query parameters: `range` (`24h`, `7d`, `30d`), `scope` (`self` or `team`), and `group_by=model` for per-model breakdowns. This endpoint is used for the model usage list.
 
 ### 5.2 Response shape
 
@@ -70,7 +70,7 @@ The balance response contains:
 -   Legacy plans return `session` and `weekly` objects inside `included` instead, each with `remaining_percent` (0-100) and `resets_at`. The app must handle both shapes; which fields appear is plan-dependent, not user-configurable.
 -   `purchased`: `balance_usd` for unexpired purchased credits.
 
-When usage history is implemented, the usage response contains `range`, `scope`, `granularity`, `from`, `until`, and `group_by`; `totals`; and chronological `buckets`. A 24h response normally has 25 hourly buckets, while 7d and 30d responses have 8 and 31 daily buckets. The active final bucket is marked `partial`. Each bucket and the aggregate object can contain the metric fields `request_count`, `usage_usd`, `input_tokens`, `cached_input_tokens`, and `output_tokens`; when `group_by=model`, each totals object and bucket can contain `groups`. Each group uses `model` for its name and can include the same metric fields. Credit-plan usage groups can include `usage_usd`, while groups representing legacy-plan activity report request counts only. Up to 10 groups are returned per response, ranked by `usage_usd` for credit plans and `request_count` for legacy activity; additional usage is combined in a remainder bucket rather than emitted as another group.
+For the model usage list, the usage response contains `range`, `scope`, `granularity`, `from`, `until`, and `group_by`; `totals`; and chronological `buckets`. The app only reads `totals.groups`; it does not render individual buckets or usage history. A 24h response normally has 25 hourly buckets, while 7d and 30d responses have 8 and 31 daily buckets, and the active final bucket is marked `partial`. Each bucket and the aggregate object can contain the metric fields `request_count`, `usage_usd`, `input_tokens`, `cached_input_tokens`, and `output_tokens`; when `group_by=model`, each totals object and bucket can contain `groups`. Each group uses `model` for its name and can include the same metric fields. Credit-plan usage groups can include `usage_usd`, while groups representing legacy-plan activity report request counts only. Up to 10 groups are returned per response, ranked by `usage_usd` for credit plans and `request_count` for legacy activity; additional usage is combined in a remainder bucket rather than emitted as another group.
 
 The API reference itself documents no session window length. The app uses the 5-hour session cycle documented at https://ollama.com/pricing (session limits reset every 5 hours, weekly every 7 days; community probes corroborate globally synchronized resets) for pace computations, degrading to a neutral session fill if the 5-hour assumption fails at runtime.
 
@@ -98,8 +98,8 @@ The balance API is limited to 10 requests per minute per user, shared across API
 -   FR-5: Clicking the status item opens a popover window anchored under the icon, hosting a small SwiftUI dashboard. Content and behavior follow FR-6 to FR-15.
 -   FR-6 (credit-based plans): The popover shows: the balance fields (`balance_usd`, `allowance_usd`, the period reset time `period.until`, and `purchased.balance_usd`); a usage bar, a blue track representing the full allowance filled from the left with the used amount (`allowance_usd` minus `balance_usd`) over the allowance and rendered green when the usage percentage is less than or equal to the elapsed-time percentage and red when it is higher; a period bar, a blue track representing the full period filled from the left with the percentage of time passed, rendered green; and a model usage list, one row per model showing its name, `request_count`, and `usage_usd`, sourced from the polling cycle's usage responses fetched with `group_by=model` (FR-14). The usage pace delta from FR-2 remains the headline metric above these details.
 -   FR-7 (legacy plans): The popover shows: the session and weekly limit bars, blue tracks representing the full session and weekly limits, each filled from the left with the used percentage (100 minus `remaining_percent`); both bars render green when their used percentage is less than or equal to the elapsed-time percentage and red when higher, with elapsed time computed over the fixed windows ending at `resets_at` (7 days for weekly; 5 hours for session), and the session bar falling back to a neutral fill if `resets_at` is more than 5 hours away or the computation is otherwise ill-defined; the reset times as `h:mm` till reset for the session line and `d:h` till reset for the weekly line, matching the compact bar summary in FR-2; and a model usage list, one row per model showing its name and `request_count`, sourced from the polling cycle's usage responses fetched with `group_by=model` (FR-14), with `usage_usd` displayed only when present, because the API reports request counts only for legacy-plan activity and ranks groups by request count.
--   FR-8: The usage endpoint is implemented for the usage history display: totals plus chronological buckets for the selected range, rendered as a list in the popover. All three ranges (24h, 7d, 30d) are fetched on every polling cycle, so FR-9's range switcher changes instantly with no network activity. For accounts whose activity includes legacy-plan requests, dollar and token totals are unavailable; the display falls back to request counts.
--   FR-9: The user can change the usage history's displayed range via the popover's range switcher (24h / 7d / 30d), which is the only control surface for the range; each launch starts at 24h (both points resolved 2026-10-17).
+-   FR-8: The usage endpoint is implemented only to populate the model usage list from the selected range. All three ranges (24h, 7d, 30d) are fetched on every polling cycle, so FR-9's range switcher changes instantly with no network activity. For accounts whose activity includes legacy-plan requests, dollar and token totals are unavailable; the display falls back to request counts. The popover does not render totals, individual usage-history buckets, or a separate usage-history list.
+-   FR-9: The user can change the model usage list's displayed range via the popover's range switcher (24h / 7d / 30d), which is the only control surface for the range and is placed above the model usage list; each launch starts at 24h (both points resolved 2026-10-17).
 
 ### API key management
 
@@ -136,7 +136,7 @@ Last-known-good data may be shown with an explicit "as of <time>" indicator in t
 ## 9. Milestones
 
 -   M1 Balance core: balance API client, key storage, key entry path, menu bar metric per FR-2 (both plan shapes), 60s polling, error states S1-S6 basic.
--   M2 Detail UI: popover with credit-based balance fields, allowance/period bars, model usage list, and usage history list with range switcher (FR-6, FR-8, FR-9), or the legacy two-line layout (FR-7), old-data indicator, key replacement UI.
+-   M2 Detail UI: popover with credit-based balance fields, allowance/period bars, model usage list with range switcher (FR-6, FR-8, FR-9), or the legacy two-line layout (FR-7), old-data indicator, key replacement UI.
 -   M3 Hardening: rate-limit backoff, retries, unit tests for the client, release packaging script updates.
 
 ## 10. Testing and verification

@@ -33,20 +33,6 @@ struct LegacyDisplay {
     var purchasedText: String?
 }
 
-struct HistoryRow: Hashable {
-    var label: String
-    var isTotal: Bool
-    var isPartial: Bool
-    var requestCount: Int?
-    var usageUsd: Double?
-}
-
-struct HistoryDisplay {
-    var rows: [HistoryRow]
-    var hasUsdData: Bool
-    var isAvailable: Bool
-}
-
 enum DashboardData {
     case credit(CreditDisplay)
     case legacy(LegacyDisplay)
@@ -156,48 +142,6 @@ enum DisplayAssembly {
             )
         }
         .sorted { ($0.requestCount ?? -1) > ($1.requestCount ?? -1) }
-    }
-
-    // MARK: FR-8 (usage history list)
-
-    static func history(for range: UsageRange, responses: [UsageRange: UsageResponse]) -> HistoryDisplay {
-        guard let response = responses[range] else {
-            return HistoryDisplay(rows: [], hasUsdData: false, isAvailable: false)
-        }
-        var rows: [HistoryRow] = []
-        if let totals = response.totals {
-            rows.append(HistoryRow(
-                label: "Total",
-                isTotal: true,
-                isPartial: false,
-                requestCount: totals.requestCount,
-                usageUsd: totals.usageUsd
-            ))
-        }
-        for bucket in response.buckets ?? [] {
-            rows.append(HistoryRow(
-                label: bucketLabel(from: bucket.from, until: bucket.until),
-                isTotal: false,
-                isPartial: bucket.partial ?? false,
-                requestCount: bucket.requestCount,
-                usageUsd: bucket.usageUsd
-            ))
-        }
-        return HistoryDisplay(
-            rows: rows,
-            hasUsdData: rows.contains { $0.usageUsd != nil },
-            isAvailable: true
-        )
-    }
-
-    static func bucketLabel(from: String?, until: String?) -> String {
-        guard let fromDate = CloudDates.parse(from) else { return "..." }
-        let startText = momentFormatter.string(from: fromDate)
-        guard let untilDate = CloudDates.parse(until) else { return startText }
-        if Calendar.current.isDate(untilDate, inSameDayAs: fromDate) {
-            return "\(startText) - \(timeFormatter.string(from: untilDate))"
-        }
-        return "\(startText) - \(momentFormatter.string(from: untilDate))"
     }
 
     static func momentText(_ date: Date) -> String {
