@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 final class AppCoordinator: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
@@ -7,23 +8,23 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
     private var apiKey: String?
     private var lastGood: BalanceSnapshot?
     private var lastBalanceError: CloudAPIError?
-    private var usageSnapshots: [UsageRange: UsageResponse] = [:]
+    private var usageResponses: [UsageRange: UsageResponse] = [:]
     private var pollTask: Task<Void, Never>?
-    private var hasPromptedKeyMissing = false
-    private var hasPromptedAuthError = false
+    private var lastCloseDate: Date?
+
+    private lazy var viewModel = makeViewModel()
+    private lazy var popover: NSPopover = makePopover()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         apiKey = keychain.read()
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.image = NSImage(systemSymbolName: "circle.hexagongrid.fill", accessibilityDescription: "Ollameter")
-        item.button?.title = "..."
+        item.button?.attributedTitle = plainTitle("...")
+        item.button?.target = self
+        item.button?.action = #selector(statusItemClicked)
         statusItem = item
         render()
         startPolling()
-        if apiKey == nil, !hasPromptedKeyMissing {
-            hasPromptedKeyMissing = true
-            presentKeyPrompt()
-        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -40,7 +41,8 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
     }
 
     private func runCycle() async {
-        guard let key = apiKey else { render()
+        guard let key = apiKey else {
+            render()
             return
         }
 
@@ -52,7 +54,7 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
 
         for (range, result) in [(UsageRange.h24, u24Result), (.d7, u7Result), (.d30, u30Result)] {
             if case .success(let response) = result {
-                usageSnapshots[range] = response
+                usageResponses[range] = response
             }
         }
 
@@ -64,16 +66,6 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
             lastBalanceError = error as? CloudAPIError ?? .badResponse
         }
         render()
-
-        if case .failure(let error) = balance,
-           let apiError = error as? CloudAPIError,
-           case .unauthorized = apiError,
-           !hasPromptedAuthError {
-            hasPromptedAuthError = true
-            DispatchQueue.main.async { [weak self] in
-                self?.presentKeyPrompt()
-            }
-        }
     }
 
     private func withResult<T>(_ operation: @escaping () async throws -> T) async -> Result<T, Error> {
@@ -84,11 +76,59 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func makeViewModel() -> PopoverViewModel {
+        let model = PopoverViewModel()
+        model.onKeyEntered = { [weak self] raw in
+            self?.saveKey(raw)
+        }
+        return model
+    }
+
+    private func makePopover() -> NSPopover {
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.animates = false
+        popover.delegate = self
+        let controller = NSHostingController(rootView: DashboardView(model: viewModel))
+        controller.sizingOptions = .preferredContentSize
+        popover.contentViewController = controller
+        return popover
+    }
+
+    @objc private func statusItemClicked() {
+        if popover.isShown {
+            popover.performClose(nil)
+            return
+        }
+        if let closed = lastCloseDate, Date().timeIntervalSince(closed) < 0.35 {
+            return
+        }
+        guard let button = statusItem?.button else { return }
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+    }
+
+    private func saveKey(_ raw: String) {
+        let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return }
+        do {
+            try keychain.write(value)
+            apiKey = value
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "Could not store the key"
+            alert.informativeText = "Check that the app has Keychain access."
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            alert.runModal()
+        }
+        render()
+        Task { await runCycle() }
+    }
+
     private func render() {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.renderTitle()
-            self.renderMenu()
+            self.syncViewModel()
         }
     }
 
@@ -96,29 +136,29 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
         guard let button = statusItem?.button else { return }
 
         if apiKey == nil {
-            button.attributedTitle = attributedTitle("Set key", color: nil)
+            button.attributedTitle = plainTitle("Set key")
             return
         }
 
         guard let good = lastGood else {
             switch lastBalanceError {
             case .unauthorized:
-                button.attributedTitle = attributedTitle("Auth error", color: nil)
+                button.attributedTitle = plainTitle("Auth error")
             case .transport, .badResponse:
-                button.attributedTitle = attributedTitle("Offline", color: nil)
+                button.attributedTitle = plainTitle("Offline")
             case .rateLimited:
-                button.attributedTitle = attributedTitle("Rate limited", color: nil)
+                button.attributedTitle = plainTitle("Rate limited")
             default:
-                button.attributedTitle = attributedTitle("...", color: nil)
+                button.attributedTitle = plainTitle("...")
             }
             return
         }
 
         switch lastBalanceError {
         case .unauthorized:
-            button.attributedTitle = attributedTitle("Auth error", color: nil)
+            button.attributedTitle = plainTitle("Auth error")
         case .transport, .badResponse:
-            button.attributedTitle = attributedTitle("Offline", color: nil)
+            button.attributedTitle = plainTitle("Offline")
         default:
             renderMetric(good, into: button)
         }
@@ -127,185 +167,122 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
     private func renderMetric(_ snapshot: BalanceSnapshot, into button: NSButton) {
         let included = snapshot.included
 
-        if snapshot.isCreditShape, let balance = included.balanceUsd, let allowance = included.allowanceUsd, allowance > 0 {
-            let usedPercent = (1 - balance / allowance) * 100
+        if snapshot.isCreditShape,
+           let balance = included.balanceUsd,
+           let allowance = included.allowanceUsd,
+           allowance > 0 {
             guard let from = CloudDates.parse(included.period?.from),
-                  let until = CloudDates.parse(included.period?.until), until > from else {
-                button.attributedTitle = attributedTitle("--", color: nil)
+                  let until = CloudDates.parse(included.period?.until),
+                  until > from else {
+                button.attributedTitle = plainTitle("--")
                 return
             }
-            let now = Date()
+            let usedPercent = (1 - balance / allowance) * 100
             let span = until.timeIntervalSince(from)
-            var elapsedPercent = now.timeIntervalSince(from) / span * 100
+            var elapsedPercent = Date().timeIntervalSince(from) / span * 100
             elapsedPercent = max(0, min(100, elapsedPercent))
             let (text, color) = Metrics.creditDelta(usedPercent: usedPercent, elapsedPercent: elapsedPercent)
-            let nsColor: NSColor? = color == .red ? .systemRed : color == .green ? .systemGreen : nil
-            button.attributedTitle = attributedTitle(text, color: nsColor)
+            button.attributedTitle = attributedTitle(text, color: color)
             return
         }
 
         if snapshot.isLegacyShape {
-            let sessionRemainder = clampPercent(included.session?.remainingPercent ?? 0)
-            let weeklyRemainder = clampPercent(included.weekly?.remainingPercent ?? 0)
             let now = Date()
-            let sessionTtl = CloudDates.parse(included.session?.resetsAt)?.timeIntervalSince(now)
-            let weeklyTtl = CloudDates.parse(included.weekly?.resetsAt)?.timeIntervalSince(now)
-            button.attributedTitle = attributedTitle(
-                Metrics.legacySummary(
-                    sessionRemainingPercent: sessionRemainder,
-                    sessionTtl: sessionTtl,
-                    weeklyRemainingPercent: weeklyRemainder,
-                    weeklyTtl: weeklyTtl
-                ),
-                color: nil
+            let summary = Metrics.legacySummary(
+                sessionRemainingPercent: DisplayAssembly.clampPercentage(included.session?.remainingPercent ?? 0),
+                sessionTtl: CloudDates.parse(included.session?.resetsAt)?.timeIntervalSince(now),
+                weeklyRemainingPercent: DisplayAssembly.clampPercentage(included.weekly?.remainingPercent ?? 0),
+                weeklyTtl: CloudDates.parse(included.weekly?.resetsAt)?.timeIntervalSince(now)
             )
+            button.attributedTitle = plainTitle(summary)
             return
         }
 
-        button.attributedTitle = attributedTitle("--", color: nil)
+        button.attributedTitle = plainTitle("--")
     }
 
-    private func clampPercent(_ value: Double?) -> Double {
-        max(0, min(100, value ?? 0))
-    }
-
-    private func attributedTitle(_ text: String, color: NSColor?) -> NSAttributedString {
-        var attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13)]
-        if let color {
-            attributes[.foregroundColor] = color
-        }
-        return NSAttributedString(string: text, attributes: attributes)
-    }
-
-    private func renderMenu() {
-        let menu = NSMenu()
-
-        let header = NSMenuItem(title: "Ollameter", action: nil, keyEquivalent: "")
-        header.isEnabled = false
-        menu.addItem(header)
+    private func syncViewModel() {
+        viewModel.usageResponses = usageResponses
+        viewModel.updatedAt = lastGood?.fetchedAt
+        viewModel.hasStoredKey = apiKey != nil
 
         if apiKey == nil {
-            menu.addItem(disabled("No API key set"))
-        } else if lastBalanceError == .unauthorized {
-            menu.addItem(disabled("API key rejected"))
+            viewModel.showKeyForm = true
+            viewModel.banner = Banner(style: .info, text: "No API key set. Enter your ollama.com API key to sync usage.")
+            viewModel.data = nil
+            return
         }
 
-        if let good = lastGood, lastBalanceError != .unauthorized {
-            let included = good.included
-            if good.isCreditShape {
-                menu.addItem(disabled("Balance \(formatUsd(included.balanceUsd)) / \(formatUsd(included.allowanceUsd))"))
-                if let purchased = good.purchasedUsd {
-                    menu.addItem(disabled("Purchased \(formatUsd(purchased))"))
-                }
-                if let reset = CloudDates.parse(included.period?.until) {
-                    menu.addItem(disabled("Resets \(resetDescription(reset))"))
-                }
-            } else if good.isLegacyShape {
-                let now = Date()
-                menu.addItem(disabled("Session \(Int(clampPercent(included.session?.remainingPercent ?? 0)))% left, resets \(ttlText(CloudDates.parse(included.session?.resetsAt)?.timeIntervalSince(now), formatter: { Metrics.hHmm($0) }))"))
-                menu.addItem(disabled("Weekly \(Int(clampPercent(included.weekly?.remainingPercent ?? 0)))% left, resets \(ttlText(CloudDates.parse(included.weekly?.resetsAt)?.timeIntervalSince(now), formatter: { Metrics.dHh($0) }))"))
-                if let purchased = good.purchasedUsd {
-                    menu.addItem(disabled("Purchased \(formatUsd(purchased))"))
-                }
-            } else {
-                menu.addItem(disabled("Balance data unavailable"))
-            }
-            menu.addItem(disabled("Updated \(timeDescription(good.fetchedAt))"))
-        } else if lastGood == nil && apiKey != nil {
-            switch lastBalanceError {
-            case .transport, .badResponse:
-                menu.addItem(disabled("Status: Offline"))
-            case .rateLimited:
-                menu.addItem(disabled("Status: Rate limited"))
-            case .unauthorized:
-                menu.addItem(disabled("Status: Auth error"))
-            default:
-                menu.addItem(disabled("Status: Waiting..."))
-            }
+        if lastBalanceError == .unauthorized {
+            viewModel.showKeyForm = true
+            viewModel.banner = Banner(style: .error, text: "API key rejected. Enter a valid key.")
+            viewModel.data = nil
+            return
         }
 
-        menu.addItem(.separator())
+        let assembled = lastGood.flatMap { assembleData(for: $0) }
 
-        let keyTitle = apiKey == nil ? "Enter API key..." : "Replace API key..."
-        let keyItem = NSMenuItem(title: keyTitle, action: #selector(enterKeyPrompt), keyEquivalent: "")
-        keyItem.target = self
-        menu.addItem(keyItem)
-
-        let quitItem = NSMenuItem(title: "Quit Ollameter", action: #selector(quit), keyEquivalent: "q")
-        quitItem.target = self
-        menu.addItem(quitItem)
-
-        statusItem?.menu = menu
-    }
-
-    private func disabled(_ text: String) -> NSMenuItem {
-        let item = NSMenuItem(title: text, action: nil, keyEquivalent: "")
-        item.isEnabled = false
-        return item
-    }
-
-    private func formatUsd(_ value: Double?) -> String {
-        Metrics.usd(value)
-    }
-
-    private func ttlText(_ seconds: TimeInterval?, formatter: (TimeInterval) -> String) -> String {
-        guard let seconds, seconds > 0 else { return "--" }
-        return formatter(seconds)
-    }
-
-    private let resetDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.setLocalizedDateFormatFromTemplate("MMMd HH:mm")
-        return formatter
-    }()
-
-    private func resetDescription(_ date: Date) -> String {
-        resetDateFormatter.string(from: date)
-    }
-
-    private let updatedFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
-
-    private func timeDescription(_ date: Date) -> String {
-        updatedFormatter.string(from: date)
-    }
-
-    private func presentKeyPrompt() {
-        NSApplication.shared.activate(ignoringOtherApps: true)
-        let alert = NSAlert()
-        alert.messageText = "Ollama API key"
-        alert.informativeText = "Enter the API key for your ollama.com account. It is stored in your Keychain."
-        let field = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
-        field.placeholderString = "API key"
-        alert.accessoryView = field
-        alert.addButton(withTitle: "Save")
-        alert.addButton(withTitle: "Cancel")
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-        let value = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return }
-        do {
-            try keychain.write(value)
-            apiKey = value
-            hasPromptedAuthError = false
-            render()
-            Task { await runCycle() }
-        } catch {
-            let errorAlert = NSAlert()
-            errorAlert.messageText = "Could not store the key"
-            errorAlert.informativeText = "Check that the app has Keychain access."
-            errorAlert.runModal()
+        switch lastBalanceError {
+        case .unauthorized:
+            viewModel.showKeyForm = true
+            viewModel.data = nil
+            viewModel.banner = Banner(style: .error, text: "API key rejected. Enter a valid key.")
+        case .transport, .badResponse:
+            viewModel.showKeyForm = false
+            viewModel.data = assembled
+            viewModel.banner = Banner(
+                style: .error,
+                text: assembled != nil ? "Offline - showing last known data." : "Offline - retrying every 60 s."
+            )
+        case .rateLimited:
+            viewModel.showKeyForm = false
+            viewModel.data = assembled
+            viewModel.banner = Banner(style: .warning, text: "Rate limited - showing last known data.")
+        case .missingKey:
+            viewModel.showKeyForm = true
+            viewModel.data = nil
+            viewModel.banner = nil
+        case .none:
+            viewModel.showKeyForm = false
+            viewModel.data = assembled
+            viewModel.banner = assembled == nil && lastGood != nil
+                ? Banner(style: .warning, text: "Balance data format unexpected.")
+                : nil
         }
     }
 
-    @objc private func enterKeyPrompt() {
-        presentKeyPrompt()
+    private func assembleData(for snapshot: BalanceSnapshot) -> DashboardData? {
+        if snapshot.isCreditShape {
+            return DisplayAssembly.credit(
+                snapshot,
+                usageResponses: usageResponses,
+                selectedRange: viewModel.selectedRange,
+                now: Date()
+            ).map { DashboardData.credit($0) }
+        }
+        if snapshot.isLegacyShape {
+            return DisplayAssembly.legacy(snapshot, now: Date()).map { DashboardData.legacy($0) }
+        }
+        return nil
     }
 
-    @objc private func quit() {
-        NSApplication.shared.terminate(nil)
+    private func plainTitle(_ text: String) -> NSAttributedString {
+        NSAttributedString(string: text)
+    }
+
+    private func attributedTitle(_ text: String, color: MetricColor) -> NSAttributedString {
+        let nsColor: NSColor
+        switch color {
+        case .red: nsColor = .systemRed
+        case .green: nsColor = .systemGreen
+        case .neutral: nsColor = .labelColor
+        }
+        return NSAttributedString(string: text, attributes: [.foregroundColor: nsColor])
+    }
+}
+
+extension AppCoordinator: NSPopoverDelegate {
+    func popoverDidClose(_ notification: Notification) {
+        lastCloseDate = Date()
     }
 }

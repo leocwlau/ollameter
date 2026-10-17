@@ -107,17 +107,20 @@ struct UsageTotals: Codable {
     var inputTokens: Int?
     var cachedInputTokens: Int?
     var outputTokens: Int?
+    var groups: [UsageGroup]?
 }
 
 struct UsageGroup: Codable {
+    var model: String?
     var name: String?
-    var scope: String?
     var requestCount: Int?
     var usageUsd: Double?
-    var usage: UsageTotals?
+    var inputTokens: Int?
+    var cachedInputTokens: Int?
+    var outputTokens: Int?
 }
 
-struct UsagePoint: Codable {
+struct UsageBucket: Codable {
     var from: String?
     var until: String?
     var partial: Bool?
@@ -130,9 +133,14 @@ struct UsagePoint: Codable {
 }
 
 struct UsageResponse: Codable {
-    var data: [UsagePoint]?
+    var range: String?
+    var scope: String?
+    var granularity: String?
+    var from: String?
+    var until: String?
+    var groupBy: String?
     var totals: UsageTotals?
-    var groups: [UsageGroup]?
+    var buckets: [UsageBucket]?
 }
 
 actor CloudAPIClient {
