@@ -11,6 +11,7 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
     private var usageResponses: [UsageRange: UsageResponse] = [:]
     private var pollTask: Task<Void, Never>?
     private var lastCloseDate: Date?
+    private var mouseDownMonitor: Any?
 
     private lazy var viewModel = makeViewModel()
     private lazy var popover: NSPopover = makePopover()
@@ -25,10 +26,15 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
         statusItem = item
         render()
         startPolling()
+        installOutsideClickMonitor()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         pollTask?.cancel()
+        if let monitor = mouseDownMonitor {
+            NSEvent.removeMonitor(monitor)
+            mouseDownMonitor = nil
+        }
     }
 
     private func startPolling() {
@@ -37,6 +43,13 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
                 await self?.runCycle()
                 try? await Task.sleep(for: .seconds(60))
             }
+        }
+    }
+
+    private func installOutsideClickMonitor() {
+        mouseDownMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self] _ in
+            guard let self, self.popover.isShown else { return }
+            self.popover.performClose(nil)
         }
     }
 
@@ -105,6 +118,8 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
         }
         guard let button = statusItem?.button else { return }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        guard let popoverWindow = popover.contentViewController?.view.window else { return }
+        popoverWindow.makeKeyAndOrderFront(nil)
     }
 
     private func saveKey(_ raw: String) {
