@@ -52,12 +52,24 @@ enum CloudDates {
     }
 }
 
+protocol CloudAPIHTTPSession {
+    func data(for request: URLRequest) async throws -> (Data, URLResponse)
+}
+
+extension URLSession: CloudAPIHTTPSession {}
+
 enum CloudJSON {
     static var decoder: JSONDecoder {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return decoder
     }
+}
+
+enum CloudAPIRetryPolicy {
+    static let maxAttempts = 3
+    static let initialDelay: Duration = .seconds(2)
+    static let backoffFactor = 2.0
 }
 
 struct BalanceWindow: Codable {
@@ -145,14 +157,23 @@ struct UsageResponse: Codable {
 
 actor CloudAPIClient {
     private let baseURL: URL
-    private let session: URLSession
+    private let session: CloudAPIHTTPSession
+    private let maxAttempts: Int
+    private let initialRetryDelay: Duration
+    private let backoffFactor: Double
 
-    init(baseURL: URL = URL(string: "https://ollama.com")!) {
+    init(
+        baseURL: URL = URL(string: "https://ollama.com")!,
+        session: CloudAPIHTTPSession = URLSession(configuration: .ephemeral),
+        maxAttempts: Int = CloudAPIRetryPolicy.maxAttempts,
+        initialRetryDelay: Duration = CloudAPIRetryPolicy.initialDelay,
+        backoffFactor: Double = CloudAPIRetryPolicy.backoffFactor
+    ) {
         self.baseURL = baseURL
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 15
-        configuration.timeoutIntervalForResource = 30
-        self.session = URLSession(configuration: configuration)
+        self.session = session
+        self.maxAttempts = maxAttempts
+        self.initialRetryDelay = initialRetryDelay
+        self.backoffFactor = backoffFactor
     }
 
     func fetchBalance(apiKey: String) async throws -> BalanceSnapshot {
@@ -195,23 +216,35 @@ actor CloudAPIClient {
         request.timeoutInterval = 15
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
 
-        do {
-            let (data, response) = try await session.data(for: request)
-            guard let http = response as? HTTPURLResponse else { throw CloudAPIError.badResponse }
-            switch http.statusCode {
-            case 200...299:
-                return try CloudJSON.decoder.decode(type, from: data)
-            case 401, 403:
-                throw CloudAPIError.unauthorized
-            case 429:
-                throw CloudAPIError.rateLimited
-            default:
-                throw CloudAPIError.badResponse
+        for attempt in 1...maxAttempts {
+            do {
+                let (data, response) = try await session.data(for: request)
+                guard let http = response as? HTTPURLResponse else { throw CloudAPIError.badResponse }
+                switch http.statusCode {
+                case 200...299:
+                    guard !data.isEmpty else {
+                        throw CloudAPIError.badResponse
+                    }
+                    return try CloudJSON.decoder.decode(type, from: data)
+                case 401, 403:
+                    throw CloudAPIError.unauthorized
+                case 429:
+                    throw CloudAPIError.rateLimited
+                default:
+                    throw CloudAPIError.badResponse
+                }
+            } catch let error as CloudAPIError {
+                if case .rateLimited = error, attempt < maxAttempts {
+                    let retryMultiplier = (1 << (attempt - 1))
+                    try? await Task.sleep(for: initialRetryDelay * retryMultiplier)
+                    continue
+                }
+                throw error
+            } catch {
+                throw CloudAPIError.transport(error)
             }
-        } catch let error as CloudAPIError {
-            throw error
-        } catch {
-            throw CloudAPIError.transport(error)
         }
+        throw CloudAPIError.badResponse
+
     }
 }

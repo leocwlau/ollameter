@@ -1,6 +1,16 @@
 #!/bin/sh
 set -euo pipefail
 
+MODE="${1:-build}"
+case "$MODE" in
+    build|test)
+        ;;
+    *)
+        echo "Usage: $0 [build|test]" >&2
+        exit 1
+        ;;
+esac
+
 DEVELOPER_DIR="${DEVELOPER_DIR:-/Volumes/SanDisk500G/Applications/Xcode.app/Contents/Developer}"
 BUNDLE_ID="dev.ollameter.app"
 APP_NAME="Ollameter"
@@ -9,6 +19,12 @@ REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MODULE_CACHE="$REPO_ROOT/.build/clang-module-cache"
 
 mkdir -p "$MODULE_CACHE"
+
+if [[ "$MODE" == "test" ]]; then
+    DEVELOPER_DIR="$DEVELOPER_DIR" /usr/bin/swift test --manifest-cache local --cache-path "$REPO_ROOT/.swiftpm-cache"
+    exit 0
+fi
+
 DEVELOPER_DIR="$DEVELOPER_DIR" /usr/bin/swift build --configuration release --manifest-cache local --cache-path "$REPO_ROOT/.swiftpm-cache"
 
 rm -rf "$BUILD_DIR"
