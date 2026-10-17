@@ -1,0 +1,2 @@
+# ollameter
+Ollama Meter
