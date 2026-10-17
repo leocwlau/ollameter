@@ -19,7 +19,8 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         apiKey = keychain.read()
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        item.button?.image = NSImage(systemSymbolName: "circle.hexagongrid.fill", accessibilityDescription: "Ollameter")
+        item.button?.image = menuBarIcon()
+            ?? NSImage(systemSymbolName: "circle.hexagongrid.fill", accessibilityDescription: "Ollameter")
         item.button?.attributedTitle = plainTitle("...")
         item.button?.target = self
         item.button?.action = #selector(statusItemClicked)
@@ -118,8 +119,6 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
         }
         guard let button = statusItem?.button else { return }
         popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        guard let popoverWindow = popover.contentViewController?.view.window else { return }
-        popoverWindow.makeKeyAndOrderFront(nil)
     }
 
     private func saveKey(_ raw: String) {
@@ -175,7 +174,7 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
         case .transport, .badResponse:
             button.attributedTitle = plainTitle("Offline")
         default:
-            renderMetric(good, into: button)
+        renderMetric(good, into: button)
         }
     }
 
@@ -214,6 +213,13 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
         }
 
         button.attributedTitle = plainTitle("--")
+    }
+
+    private func menuBarIcon() -> NSImage? {
+        guard let image = Bundle.main.image(forResource: "menu-bar-icon") else { return nil }
+        image.isTemplate = true
+        image.size = NSSize(width: 18, height: 18)
+        return image
     }
 
     private func syncViewModel() {

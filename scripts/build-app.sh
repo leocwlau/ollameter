@@ -17,6 +17,7 @@ APP_NAME="Ollameter"
 BUILD_DIR=".build/release/Ollameter.app"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MODULE_CACHE="$REPO_ROOT/.build/clang-module-cache"
+ASSETS_DIR="$REPO_ROOT/assets"
 
 mkdir -p "$MODULE_CACHE"
 
@@ -29,6 +30,14 @@ DEVELOPER_DIR="$DEVELOPER_DIR" /usr/bin/swift build --configuration release --ma
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR/Contents/MacOS" "$BUILD_DIR/Contents/Resources"
+
+if [[ -f "$ASSETS_DIR/Ollameter.icns" ]]; then
+    cp "$ASSETS_DIR/Ollameter.icns" "$BUILD_DIR/Contents/Resources/"
+fi
+
+if [[ -f "$ASSETS_DIR/menu-bar-icon.png" ]]; then
+    cp "$ASSETS_DIR/menu-bar-icon.png" "$BUILD_DIR/Contents/Resources/"
+fi
 
 cat > "$BUILD_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -45,6 +54,8 @@ cat > "$BUILD_DIR/Contents/Info.plist" <<PLIST
     <string>${BUNDLE_ID}</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
+    <key>CFBundleIconFile</key>
+    <string>Ollameter</string>
     <key>CFBundleName</key>
     <string>Ollameter</string>
     <key>CFBundlePackageType</key>

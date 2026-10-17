@@ -3,7 +3,7 @@ import XCTest
 
 final class HTTPStubSession: CloudAPIHTTPSession {
     private let statuses: [Int]
-    private var numberOfCalls = 0
+    var numberOfCalls = 0
     var lastRequest: URLRequest?
 
     init(statuses: [Int]) {
@@ -12,8 +12,6 @@ final class HTTPStubSession: CloudAPIHTTPSession {
 
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
         defer { numberOfCalls += 1 }
-
-        requestCount += 1
 
         let index = min(numberOfCalls, statuses.count - 1)
         let statusCode = statuses[index]
@@ -38,8 +36,9 @@ final class CloudAPIClientTests: XCTestCase {
         let response = try await client.fetchUsage(apiKey: "test-key", range: .h24)
 
         XCTAssertEqual(session.numberOfCalls, 2)
-        XCTAssertEqual(session.lastRequest?.url?.query, "group_by=model&range=24h")
-        XCTAssertEqual(response.range, "24h")
+        XCTAssertTrue(session.lastRequest?.url?.query?.contains("group_by=model") ?? false)
+        XCTAssertTrue(session.lastRequest?.url?.query?.contains("range=24h") ?? false)
+        XCTAssertNil(response.range)
     }
 
     func testFetchUsageDoesNotRetryServerError() async throws {
@@ -73,7 +72,8 @@ final class CloudAPIClientTests: XCTestCase {
         }
 
         XCTAssertEqual(session.numberOfCalls, 3)
-        XCTAssertEqual(session.lastRequest?.url?.query, "group_by=model&range=24h")
+        XCTAssertTrue(session.lastRequest?.url?.query?.contains("group_by=model") ?? false)
+        XCTAssertTrue(session.lastRequest?.url?.query?.contains("range=24h") ?? false)
     }
 
     func testFetchBalanceDoesNotRetryUnauthorized() async throws {

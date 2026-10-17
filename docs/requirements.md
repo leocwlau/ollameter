@@ -34,6 +34,10 @@ Balance data comes exclusively from the Ollama cloud balance API documented at h
 
 AppKit-only code (menu bar item, popover hosting) must not be mixed into files the iOS target would need to compile.
 
+### App and menu bar icon
+
+The artist-supplied images are used for the macOS app bundle icon and the popover-opening menu bar icon. The release packaging script converts `assets/ollameter-icon.jpeg` into `Ollameter.icns` and `assets/ollameter-mono.jpeg` into a monochrome template `menu-bar-icon.png` with transparent regions for dark and light menu bar appearances. The source images stay under `assets/`.
+
 ### Distribution and signing
 
 -   Current: `scripts/build-app.sh` produces an ad-hoc signed `Ollameter.app` for local use; no Apple Developer Program membership is required. Rebuilds rotate a fresh ad-hoc identity, which can occasionally re-prompt for keychain authorization.
