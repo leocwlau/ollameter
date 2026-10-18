@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import SwiftUI
 
 struct Banner: Equatable {
@@ -51,6 +52,7 @@ struct DashboardView: View {
                 }
             }
 
+            LaunchAtLoginToggle()
             FooterView(model: model)
         }
         .padding(12)
@@ -323,13 +325,37 @@ struct FooterView: View {
                 Text("© 2026 ")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                Link("leocwlau", destination: URL(string: "https://leocwlau.com")!)
+                Link("leocwlau", destination: URL(string: "https://leocwlau.com?utm_medium=app&utm_source=ollameter")!)
                     .font(.caption2)
                     .foregroundColor(Color(nsColor: .systemBlue))
                     .underline()
                 Spacer()
             }
         }
+    }
+}
+
+struct LaunchAtLoginToggle: View {
+    @State private var enabled = SMAppService.mainApp.status == .enabled
+
+    var body: some View {
+        Toggle("Start at login", isOn: $enabled)
+            .onChange(of: enabled) { newValue in
+                do {
+                    if newValue {
+                        try SMAppService.mainApp.register()
+                    } else {
+                        try SMAppService.mainApp.unregister()
+                    }
+                } catch {
+                    #if DEBUG
+                    print(error)
+                    #endif
+                }
+                enabled = SMAppService.mainApp.status == .enabled
+            }
+        .font(.caption)
+        .controlSize(.small)
     }
 }
 
