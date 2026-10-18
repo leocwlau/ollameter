@@ -302,19 +302,33 @@ struct FooterView: View {
     }()
 
     var body: some View {
-        HStack {
-            if let updatedAt = model.updatedAt {
-                Text("Updated " + Self.timeFormatter.string(from: updatedAt))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-            Spacer()
-            if model.hasStoredKey {
-                Button("Replace key...") { model.showKeyForm = true }
+        VStack(spacing: 8) {
+            HStack {
+                if let updatedAt = model.updatedAt {
+                    Text("Updated " + Self.timeFormatter.string(from: updatedAt))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if model.hasStoredKey {
+                    Button("Replace key...") { model.showKeyForm = true }
+                        .controlSize(.small)
+                }
+                Button("Quit Ollameter") { NSApplication.shared.terminate(nil) }
                     .controlSize(.small)
             }
-            Button("Quit Ollameter") { NSApplication.shared.terminate(nil) }
-                .controlSize(.small)
+
+            HStack {
+                Spacer()
+                Text("© 2026 ")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Link("leocwlau", destination: URL(string: "https://leocwlau.com")!)
+                    .font(.caption2)
+                    .foregroundColor(Color(nsColor: .systemBlue))
+                    .underline()
+                Spacer()
+            }
         }
     }
 }
