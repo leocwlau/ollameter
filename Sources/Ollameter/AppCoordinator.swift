@@ -296,7 +296,7 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
     private func attributedTitle(_ text: String, color: MetricColor) -> NSAttributedString {
         let nsColor: NSColor
         switch color {
-        case .red: nsColor = .systemRed
+        case .red: nsColor = NSColor(red: 0.74, green: 0.19, blue: 0.19, alpha: 1)
         case .green: nsColor = .systemGreen
         case .neutral: nsColor = .labelColor
         }
