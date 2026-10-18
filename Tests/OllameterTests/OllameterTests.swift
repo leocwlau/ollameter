@@ -44,11 +44,11 @@ final class OllameterTests: XCTestCase {
     }
 
     func testDeltaTitleAndColor() {
-        XCTAssertEqual(Metrics.creditDelta(usedPercent: 40, elapsedPercent: 20).text, "+20%")
+        XCTAssertEqual(Metrics.creditDelta(usedPercent: 40, elapsedPercent: 20).text, "+20.0%")
         XCTAssertEqual(Metrics.creditDelta(usedPercent: 40, elapsedPercent: 20).color, MetricColor.red)
-        XCTAssertEqual(Metrics.creditDelta(usedPercent: 10, elapsedPercent: 20).text, "-10%")
+        XCTAssertEqual(Metrics.creditDelta(usedPercent: 10, elapsedPercent: 20).text, "-10.0%")
         XCTAssertEqual(Metrics.creditDelta(usedPercent: 10, elapsedPercent: 20).color, MetricColor.green)
-        XCTAssertEqual(Metrics.creditDelta(usedPercent: 20, elapsedPercent: 20).text, "0%")
+        XCTAssertEqual(Metrics.creditDelta(usedPercent: 20, elapsedPercent: 20).text, "0.0%")
         XCTAssertEqual(Metrics.creditDelta(usedPercent: 20, elapsedPercent: 20).color, MetricColor.green)
     }
 
@@ -60,7 +60,7 @@ final class OllameterTests: XCTestCase {
     func testLegacySummaryText() {
         XCTAssertEqual(
             Metrics.legacySummary(sessionRemainingPercent: 64, sessionTtl: 7800, weeklyRemainingPercent: 81, weeklyTtl: 5 * 86400 + 4 * 3600),
-            "S 64% 2:10 W 81% 5d:4h"
+            "S 64.0% 2:10 W 81.0% 5d:4h"
         )
     }
 
