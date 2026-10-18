@@ -18,6 +18,7 @@ BUILD_DIR=".build/release/Ollameter.app"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MODULE_CACHE="$REPO_ROOT/.build/clang-module-cache"
 ASSETS_DIR="$REPO_ROOT/assets"
+ICONSET_DIR="$ASSETS_DIR/Ollameter.iconset"
 
 mkdir -p "$MODULE_CACHE"
 
@@ -26,18 +27,25 @@ if [[ "$MODE" == "test" ]]; then
     exit 0
 fi
 
+
+if [[ -f "$ASSETS_DIR/Ollameter-1024.png" ]]; then
+    mkdir -p "$ICONSET_DIR"
+    for size in 16 32 128 256 512; do
+        /usr/bin/sips -s format png -z "$size" "$size" "$ASSETS_DIR/Ollameter-1024.png" \
+            --out "$ICONSET_DIR/icon_${size}x${size}.png" >/dev/null
+        /usr/bin/sips -s format png -z $((size * 2)) $((size * 2)) "$ASSETS_DIR/Ollameter-1024.png" \
+            --out "$ICONSET_DIR/icon_${size}x${size}@2x.png" >/dev/null
+    done
+    /usr/bin/iconutil -c icns "$ICONSET_DIR" -o "$ASSETS_DIR/Ollameter.icns"
+fi
+
 DEVELOPER_DIR="$DEVELOPER_DIR" /usr/bin/swift build --configuration release --manifest-cache local --cache-path "$REPO_ROOT/.swiftpm-cache"
 
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR/Contents/MacOS" "$BUILD_DIR/Contents/Resources"
 
-if [[ -f "$ASSETS_DIR/Ollameter.icns" ]]; then
-    cp "$ASSETS_DIR/Ollameter.icns" "$BUILD_DIR/Contents/Resources/"
-fi
-
-if [[ -f "$ASSETS_DIR/menu-bar-icon.png" ]]; then
-    cp "$ASSETS_DIR/menu-bar-icon.png" "$BUILD_DIR/Contents/Resources/"
-fi
+cp "$ASSETS_DIR/Ollameter.icns" "$BUILD_DIR/Contents/Resources/Ollameter.icns"
+cp "$ASSETS_DIR/menu-bar-icon.png" "$BUILD_DIR/Contents/Resources/menu-bar-icon.png"
 
 cat > "$BUILD_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
