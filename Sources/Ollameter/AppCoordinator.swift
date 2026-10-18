@@ -1,4 +1,5 @@
 import AppKit
+import Network
 import SwiftUI
 
 final class AppCoordinator: NSObject, NSApplicationDelegate {
@@ -10,6 +11,8 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
     private var lastBalanceError: CloudAPIError?
     private var usageResponses: [UsageRange: UsageResponse] = [:]
     private var pollTask: Task<Void, Never>?
+    private var networkMonitor: NWPathMonitor?
+    private var isNetworkPathSatisfied = false
     private var lastCloseDate: Date?
     private var mouseDownMonitor: Any?
 
@@ -26,16 +29,42 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
         item.button?.action = #selector(statusItemClicked)
         statusItem = item
         render()
+        startNetworkMonitor()
         startPolling()
         installOutsideClickMonitor()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         pollTask?.cancel()
+        networkMonitor?.cancel()
+        networkMonitor = nil
         if let monitor = mouseDownMonitor {
             NSEvent.removeMonitor(monitor)
             mouseDownMonitor = nil
         }
+    }
+
+    private func startNetworkMonitor() {
+        let monitor = NWPathMonitor()
+        monitor.pathUpdateHandler = { [weak self] path in
+            let isSatisfied = path.status == .satisfied
+            DispatchQueue.main.async {
+                self?.setNetworkPathSatisfied(isSatisfied)
+            }
+        }
+        monitor.start(queue: DispatchQueue(label: "com.leocwlau.ollameter.network-path"))
+        networkMonitor = monitor
+    }
+
+    private func setNetworkPathSatisfied(_ isSatisfied: Bool) {
+        let wasSatisfied = isNetworkPathSatisfied
+        isNetworkPathSatisfied = isSatisfied
+        render()
+
+        // A reconnect interrupts the fixed 60 s sleep so the next cycle runs now.
+        guard isSatisfied, !wasSatisfied else { return }
+        pollTask?.cancel()
+        startPolling()
     }
 
     private func startPolling() {
@@ -56,6 +85,10 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
 
     private func runCycle() async {
         guard let key = apiKey else {
+            render()
+            return
+        }
+        guard isNetworkPathSatisfied else {
             render()
             return
         }
@@ -154,12 +187,20 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
             return
         }
 
+        if lastBalanceError == .unauthorized {
+            button.attributedTitle = plainTitle("Auth error")
+            return
+        }
+
+        guard isNetworkPathSatisfied else {
+            button.attributedTitle = plainTitle("Waiting for network")
+            return
+        }
+
         guard let good = lastGood else {
             switch lastBalanceError {
-            case .unauthorized:
-                button.attributedTitle = plainTitle("Auth error")
             case .transport, .badResponse:
-                button.attributedTitle = plainTitle("Offline")
+                button.attributedTitle = plainTitle("Unable to connect")
             case .rateLimited:
                 button.attributedTitle = plainTitle("Rate limited")
             default:
@@ -169,10 +210,8 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
         }
 
         switch lastBalanceError {
-        case .unauthorized:
-            button.attributedTitle = plainTitle("Auth error")
         case .transport, .badResponse:
-            button.attributedTitle = plainTitle("Offline")
+            button.attributedTitle = plainTitle("Unable to connect")
         default:
         renderMetric(good, into: button)
         }

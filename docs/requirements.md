@@ -96,6 +96,7 @@ The balance API is limited to 10 requests per minute per user, shared across API
 -   FR-2: The menu bar title is plan-dependent. For new (credit-based) plans it shows the usage pace delta in percentage points: percentage of credits used minus percentage of the billing period elapsed, rendered with an explicit sign and one decimal place (for example `+20.0%`, `-3.0%`, `0.0%`). Positive values render dark red; negative and zero values render green. The bar always shows this delta alone; remaining USD and other balance detail live in the popover. The delta is bounded to at most +100 percentage points (credit usage cannot exceed the allowance within a period), so no special handling is needed in the first minutes of a billing period; if included usage ever exceeds the allowance, the displayed delta is capped at +100 percentage points. For legacy plans the bar shows a compact single-line summary combining session and weekly state: `S <session remaining>% <h:mm till reset> W <weekly remaining>% <d:h till reset>` (for example `S 64.0% 2:10 W 81.0% 5d:4h`).
 -   FR-3: The title updates on each successful poll.
 -   FR-4: When data cannot be fetched, the menu bar shows a distinguishable offline/error state, not stale data presented as current (see section 8).
+-   FR-16: The app observes system network availability with `NWPathMonitor`. When there is no satisfied network path, the menu bar shows `Waiting for network` and network requests are not attempted. When network availability changes to satisfied, the app starts a normal polling cycle immediately; thereafter, FR-14's cadence applies. When a satisfied network path exists but `ollama.com` cannot be reached, a request times out, DNS fails, the response is invalid, or the API returns another transient error, the menu bar shows `Unable to connect`. No-key and invalid-key states retain their existing precedence over these network states.
 
 ### Usage detail UI
 
@@ -132,7 +133,8 @@ The app must distinguish these states in both the menu bar and the detail view:
 -   S2 Valid key, data loading: menu bar shows last known good data or `...`; detail view shows progress.
 -   S3 Valid key, data loaded: menu bar shows the primary metric; detail view shows balance and reset time.
 -   S4 Invalid key (401/403): menu bar shows an error indicator; detail view surfaces the error and key re-entry.
--   S5 Network offline or request failure: menu bar shows the offline state; detail view shows the error and the age of last good data.
+-   S5 No network path: menu bar shows `Waiting for network`; detail view shows the network-unavailable state and the age of last good data.
+-   S7 Network path satisfied but Ollama API unreachable or otherwise failing: menu bar shows `Unable to connect`; detail view shows the connection error and the age of last good data.
 -   S6 Rate limited: menu bar keeps last good data; detail view shows a backoff notice.
 
 Last-known-good data may be shown with an explicit "as of <time>" indicator in the detail view, never presented as live current data.
@@ -141,12 +143,12 @@ Last-known-good data may be shown with an explicit "as of <time>" indicator in t
 
 -   M1 Balance core: balance API client, key storage, key entry path, menu bar metric per FR-2 (both plan shapes), 60s polling, error states S1-S6 basic.
 -   M2 Detail UI: popover with credit-based balance fields, allowance/period bars, model usage list with range switcher (FR-6, FR-8, FR-9), or the legacy two-line layout (FR-7), old-data indicator, key replacement UI.
--   M3 Hardening: rate-limit backoff, retries, unit tests for the client, release packaging script updates.
+-   M3 Hardening: rate-limit backoff, retries, `NWPathMonitor`-driven startup and reconnect handling, unit tests for the client, release packaging script updates.
 
 ## 10. Testing and verification
 
 -   The balance and usage clients must be unit-testable against canned JSON fixtures for both modern and legacy balance shapes, plus grouped usage responses for FR-6's model list.
--   Manual verification matrix: with valid key, with invalid key, with no key, offline, and rate-limited behavior.
+-   Manual verification matrix: with valid key, with invalid key, with no key, without a network path, with a network path but unreachable/failing Ollama API, and rate-limited behavior.
 -   Release build must produce a working `Ollameter.app` via `scripts/build-app.sh` (or its Xcode-based successor) that launches as a menu bar app with no Dock icon.
 
 ## 11. Open decisions
