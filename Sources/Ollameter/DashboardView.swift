@@ -145,7 +145,7 @@ struct CreditDataView: View {
                 label: "Usage",
                 fillFraction: credit.usedPercent / 100,
                 fillColor: color(credit.usedColor),
-                caption: "\(credit.usageText) of \(credit.allowanceText) used"
+                caption: "\(credit.usageText) of \(credit.allowanceText) used - \(percent(credit.usedPercent))"
             )
             LimitBarView(
                 label: "Period",
@@ -168,7 +168,7 @@ struct CreditDataView: View {
     }
 
     private func percent(_ value: Double) -> String {
-        "\(Int(value.rounded()))%"
+        String(format: "%.1f%%", value)
     }
 
     private func keyValue(_ key: String, _ value: String) -> some View {
