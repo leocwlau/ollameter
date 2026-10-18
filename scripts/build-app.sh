@@ -46,6 +46,7 @@ mkdir -p "$BUILD_DIR/Contents/MacOS" "$BUILD_DIR/Contents/Resources"
 
 cp "$ASSETS_DIR/Ollameter.icns" "$BUILD_DIR/Contents/Resources/Ollameter.icns"
 cp "$ASSETS_DIR/menu-bar-icon.png" "$BUILD_DIR/Contents/Resources/menu-bar-icon.png"
+cp "$ASSETS_DIR/menu-bar-icon@2x.png" "$BUILD_DIR/Contents/Resources/menu-bar-icon@2x.png"
 
 cat > "$BUILD_DIR/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>

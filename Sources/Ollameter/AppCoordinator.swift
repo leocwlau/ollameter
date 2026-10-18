@@ -216,9 +216,11 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
     }
 
     private func menuBarIcon() -> NSImage? {
-        guard let image = Bundle.main.image(forResource: "menu-bar-icon") else { return nil }
+        let source = Bundle.main.image(forResource: "menu-bar-icon")
+            ?? Bundle.main.image(forResource: "menu-bar-icon@2x")
+        guard let image = source else { return nil }
         image.isTemplate = true
-        image.size = NSSize(width: 18, height: 18)
+        image.size = NSSize(width: 22, height: 22)
         return image
     }
 
