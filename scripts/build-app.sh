@@ -11,7 +11,21 @@ case "$MODE" in
         ;;
 esac
 
-DEVELOPER_DIR="${DEVELOPER_DIR:-/Volumes/SanDisk500G/Applications/Xcode.app/Contents/Developer}"
+DEVELOPER_DIR="${DEVELOPER_DIR:-}"
+
+if [[ -z "$DEVELOPER_DIR" ]]; then
+    if [[ -x "/Applications/Xcode.app/Contents/Developer/usr/bin/swift" ]]; then
+        DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
+    else
+        DEVELOPER_DIR="$(xcode-select -p 2>/dev/null || true)"
+    fi
+fi
+
+if [[ -z "$DEVELOPER_DIR" || ! -d "$DEVELOPER_DIR" ]]; then
+    echo "No Xcode or Command Line Tools installation found. Install with 'xcode-select --install' or set DEVELOPER_DIR." >&2
+    exit 1
+fi
+
 BUNDLE_ID="com.leocwlau.ollameter"
 APP_NAME="Ollameter"
 BUILD_DIR=".build/release/Ollameter.app"
@@ -21,6 +35,7 @@ ASSETS_DIR="$REPO_ROOT/assets"
 ICONSET_DIR="$ASSETS_DIR/Ollameter.iconset"
 
 mkdir -p "$MODULE_CACHE"
+export SWIFTPM_MODULECACHE_OVERRIDE="$MODULE_CACHE"
 
 if [[ "$MODE" == "test" ]]; then
     DEVELOPER_DIR="$DEVELOPER_DIR" /usr/bin/swift test --manifest-cache local --cache-path "$REPO_ROOT/.swiftpm-cache"
