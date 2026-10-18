@@ -14,7 +14,7 @@ esac
 DEVELOPER_DIR="${DEVELOPER_DIR:-}"
 
 if [[ -z "$DEVELOPER_DIR" ]]; then
-    if [[ -x "/Applications/Xcode.app/Contents/Developer/usr/bin/swift" ]]; then
+    if [[ -f "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libSwiftUIMacros.dylib" ]]; then
         DEVELOPER_DIR="/Applications/Xcode.app/Contents/Developer"
     else
         DEVELOPER_DIR="$(xcode-select -p 2>/dev/null || true)"
@@ -22,7 +22,12 @@ if [[ -z "$DEVELOPER_DIR" ]]; then
 fi
 
 if [[ -z "$DEVELOPER_DIR" || ! -d "$DEVELOPER_DIR" ]]; then
-    echo "No Xcode or Command Line Tools installation found. Install with 'xcode-select --install' or set DEVELOPER_DIR." >&2
+    echo "Full Xcode is required for SwiftUI macros. Install Xcode 15 or newer, or set DEVELOPER_DIR." >&2
+    exit 1
+fi
+
+if [[ ! -f "$DEVELOPER_DIR/Platforms/MacOSX.platform/Developer/usr/lib/swift/host/plugins/libSwiftUIMacros.dylib" ]]; then
+    echo "The selected developer directory does not contain the SwiftUI macro plugin. Full Xcode is required; Apple Command Line Tools are not sufficient." >&2
     exit 1
 fi
 

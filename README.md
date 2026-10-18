@@ -26,19 +26,25 @@ There is no manual refresh control. The menu bar and popover update after the ne
 
 ## Build prerequisites
 
-To build the project after cloning it to a Mac, install a Swift 5.9-compatible toolchain. Apple Command Line Tools are sufficient for this SwiftPM-only project:
+Building this project on macOS 13 or later requires a **full Xcode** installation that includes SwiftUI macro plugins. Apple Command Line Tools alone are not sufficient.
+
+A clean clone needs a **full Xcode installation** that includes the SwiftUI macro plugin. Apple Command Line Tools alone are not sufficient for this project.
+
+Install Xcode 15 or later from the Mac App Store, then point macOS at it if needed:
 
 ```sh
-xcode-select --install
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
 ```
 
-Full Xcode 15 or later is also suitable and is the better choice if you want to browse sources in Xcode or migrate to a standard Xcode project later. The build script uses only Apple-provided tools: `swift`, `sips`, `iconutil`, and `codesign`. It does not require Homebrew, Python, Node.js, CocoaPods, or any third-party Swift package dependencies.
-
-If Xcode or the Command Line Tools are installed in a custom location, point the build at it:
+If your Xcode installation is on another volume or uses a custom name, point the build directly at it:
 
 ```sh
 DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer ./scripts/build-app.sh
 ```
+
+The script uses Apple-provided tools only: `swift`, `sips`, `iconutil`, and `codesign`. It does not require Homebrew, Python, Node.js, CocoaPods, or any third-party Swift package dependencies.
+
+Command Line Tools alone are not sufficient because SwiftUI macro plugins are only shipped with full Xcode. If `./scripts/build-app.sh` reports a missing SwiftUI macro plugin, set `DEVELOPER_DIR` to a full Xcode installation's `Contents/Developer` directory or switch `xcode-select` to that install.
 
 ## Install and start
 
