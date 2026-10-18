@@ -3,7 +3,7 @@ import SwiftUI
 
 final class AppCoordinator: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
-    private let keychain = KeychainStore(service: "dev.ollameter.app", account: "api-key")
+    private let keychain = KeychainStore(service: "com.leocwlau.ollameter", account: "api-key")
     private let client = CloudAPIClient()
     private var apiKey: String?
     private var lastGood: BalanceSnapshot?
