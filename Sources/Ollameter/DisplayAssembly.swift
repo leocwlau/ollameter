@@ -51,21 +51,28 @@ enum DisplayAssembly {
                        now: Date) -> CreditDisplay? {
         let included = snapshot.included
         guard let balanceUsd = included.balanceUsd,
-              let allowanceUsd = included.allowanceUsd,
-              allowanceUsd > 0 else { return nil }
+              let allowanceUsd = included.allowanceUsd else { return nil }
+        // Unpaid accounts return a valid zero-balance/zero-allowance period.
+        guard allowanceUsd > 0 || (balanceUsd == 0 && allowanceUsd == 0) else { return nil }
         guard let from = CloudDates.parse(included.period?.from),
               let until = CloudDates.parse(included.period?.until),
               until > from else { return nil }
 
-        let usedPercent = clampPercentage((1 - balanceUsd / allowanceUsd) * 100)
+        let usedPercent = allowanceUsd > 0
+            ? clampPercentage((1 - balanceUsd / allowanceUsd) * 100)
+            : 0
         let span = until.timeIntervalSince(from)
         let elapsedPercent = clampPercentage(now.timeIntervalSince(from) / span * 100)
-        let delta = Metrics.creditDelta(usedPercent: usedPercent, elapsedPercent: elapsedPercent)
+        let delta = allowanceUsd > 0
+            ? Metrics.creditDelta(usedPercent: usedPercent, elapsedPercent: elapsedPercent)
+            : (text: "--", color: MetricColor.neutral)
 
         return CreditDisplay(
             deltaText: delta.text,
             deltaColor: delta.color,
-            deltaCaption: delta.color == .red ? "ahead of usage pace" : "under usage pace",
+            deltaCaption: delta.color == .red
+                ? "ahead of usage pace"
+                : (delta.color == .neutral ? "No allowance in this period" : "under usage pace"),
             usageText: Metrics.usd(allowanceUsd - balanceUsd),
             balanceText: Metrics.usd(balanceUsd),
             allowanceText: Metrics.usd(allowanceUsd),

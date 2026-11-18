@@ -21,6 +21,7 @@ final class AppCoordinator: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         apiKey = keychain.read()
+        ApplicationPasteMenu.install()
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.image = menuBarIcon()
             ?? NSImage(systemSymbolName: "circle.hexagongrid.fill", accessibilityDescription: "Ollameter")

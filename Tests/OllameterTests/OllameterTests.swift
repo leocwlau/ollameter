@@ -25,6 +25,47 @@ final class OllameterTests: XCTestCase {
         XCTAssertFalse(snapshot.isLegacyShape)
     }
 
+    func testDecodesUnpaidZeroAllowanceBalance() throws {
+        let fixture = """
+        {
+          "included": {
+            "balance_usd": 0,
+            "allowance_usd": 0,
+            "period": {
+              "from": "2026-11-07T07:55:20.089075Z",
+              "until": "2026-12-07T07:55:20.089075Z"
+            }
+          },
+          "purchased": { "balance_usd": 0 }
+        }
+        """
+
+        let response = try CloudJSON.decoder.decode(BalanceResponse.self, from: fixture.data(using: .utf8)!)
+        XCTAssertEqual(response.included?.balanceUsd, 0)
+        XCTAssertEqual(response.included?.allowanceUsd, 0)
+        XCTAssertEqual(response.purchased?.balanceUsd, 0)
+
+        let snapshot = BalanceSnapshot(included: response.included!, purchasedUsd: response.purchased?.balanceUsd, fetchedAt: Date())
+        XCTAssertTrue(snapshot.isCreditShape)
+        XCTAssertFalse(snapshot.isLegacyShape)
+
+        let credit = try XCTUnwrap(DisplayAssembly.credit(
+            snapshot,
+            usageResponses: [:],
+            selectedRange: .h24,
+            now: Date()
+        ))
+        XCTAssertEqual(credit.deltaText, "--")
+        XCTAssertEqual(credit.deltaColor, .neutral)
+        XCTAssertEqual(credit.deltaCaption, "No allowance in this period")
+        XCTAssertEqual(credit.usageText, "$0.00")
+        XCTAssertEqual(credit.allowanceText, "$0.00")
+        XCTAssertEqual(credit.balanceText, "$0.00")
+        XCTAssertEqual(credit.usedPercent, 0)
+        XCTAssertNotNil(credit.purchasedText)
+        XCTAssertNotNil(credit.resetsText)
+    }
+
     func testDecodesLegacyPlanBalance() throws {
         let fixture = """
         {

@@ -33,6 +33,7 @@ fi
 
 BUNDLE_ID="com.leocwlau.ollameter"
 APP_NAME="Ollameter"
+APP_VERSION="1.0.1"
 BUILD_DIR=".build/release/Ollameter.app"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MODULE_CACHE="$REPO_ROOT/.build/clang-module-cache"
@@ -90,9 +91,9 @@ cat > "$BUILD_DIR/Contents/Info.plist" <<PLIST
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>${APP_VERSION}</string>
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>${APP_VERSION}</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>LSUIElement</key>
